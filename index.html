@@ -98,8 +98,14 @@
         .card code { font-family: 'Courier New', monospace; font-size: 1rem; line-height: 1.6; display: block; color: #cfe9ff; white-space: pre-wrap; }
         .rule { width: 100%; font-size: 1.25rem; line-height: 1.6; color: var(--purple); border-left: 3px solid var(--purple); padding-left: 1.1rem; max-width: 1000px; margin-top: 2rem; opacity: 0; }
 
-        #slide-9, #slide-10, #slide-12 { padding-right: 5%; }
+        #slide-9, #slide-9-cli, #slide-10, #slide-12 { padding-right: 27%; }
         #slide-9 h2, #slide-10 h2, #slide-12 h2 { font-size: 2.8rem; margin-bottom: 1rem; }
+        @media (max-width: 600px) {
+            #slide-9, #slide-9-cli, #slide-10, #slide-12 { padding-left: 5%; }
+            #slide-9 h2, #slide-9-cli h2, #slide-10 h2, #slide-12 h2 { font-size: 1.65rem; overflow-wrap: anywhere; }
+            #slide-9 .card, #slide-10 .card, #slide-12 .card { min-width: 0; padding: 1rem; }
+            #slide-9-cli p, #slide-10 p, #slide-12 p { font-size: 1.1rem; }
+        }
     </style>
 </head>
 <body>
@@ -504,17 +510,129 @@ No math.</code>
         robotHand.position.set(25, 5, 10); robotHand.rotation.z = Math.PI/2; scene.add(robotHand);
 
         const robot = new THREE.Group();
-        robot.add(new THREE.Mesh(new THREE.BoxGeometry(3, 4, 1.5), new THREE.MeshPhongMaterial({ color: 0x555555 }))); 
-        const head = new THREE.Mesh(new THREE.SphereGeometry(1.2), new THREE.MeshPhongMaterial({ color: 0xcccccc })); head.position.y = 3.5; robot.add(head);
-        
-        const rArm = new THREE.Group(); rArm.position.set(2, 1.5, 0);
-        const rMesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 3.5, 0.8), new THREE.MeshPhongMaterial({ color: 0x999999 })); rMesh.position.y = -1.75; rArm.add(rMesh);
-        const lArm = new THREE.Group(); lArm.position.set(-2, 1.5, 0);
-        const lMesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 3.5, 0.8), new THREE.MeshPhongMaterial({ color: 0x999999 })); lMesh.position.y = -1.75; lArm.add(lMesh);
-        
-        robot.add(rArm, lArm);
+        robot.name = 'Research robot';
+        const robotMaterials = {
+            shell: new THREE.MeshPhongMaterial({ color: 0xe9edf0, specular: 0xffffff, shininess: 95 }),
+            coat: new THREE.MeshPhongMaterial({ color: 0xf5f3ef, shininess: 12, side: THREE.DoubleSide }),
+            dark: new THREE.MeshPhongMaterial({ color: 0x181521, specular: 0x80748b, shininess: 65 }),
+            metal: new THREE.MeshPhongMaterial({ color: 0x858391, shininess: 100 }),
+            sensor: new THREE.MeshPhongMaterial({ color: 0x00e5ff, emissive: 0x007c89, shininess: 90 })
+        };
+        const robotSphere = new THREE.SphereGeometry(1, 40, 28);
+        function robotPart(parent, geometry, material, position, scale = [1, 1, 1]) {
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(...position);
+            mesh.scale.set(...scale);
+            parent.add(mesh);
+            return mesh;
+        }
+        function robotRod(parent, from, to, radius, material) {
+            const start = new THREE.Vector3(...from), end = new THREE.Vector3(...to);
+            const direction = end.clone().sub(start);
+            const mesh = robotPart(parent, new THREE.CylinderGeometry(radius, radius, direction.length(), 12), material, start.clone().add(end).multiplyScalar(0.5).toArray());
+            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+            return mesh;
+        }
+        function coatPanel(points) {
+            const shape = new THREE.Shape();
+            points.forEach(([x, y], i) => i ? shape.lineTo(x, y) : shape.moveTo(x, y));
+            shape.closePath();
+            return new THREE.ExtrudeGeometry(shape, { depth: 0.09, bevelEnabled: true, bevelThickness: 0.045, bevelSize: 0.045, bevelSegments: 2, steps: 1 });
+        }
+
+        robotPart(robot, robotSphere, robotMaterials.dark, [0, 0, 0], [1.35, 2.05, 0.72]);
+        for (let i = 0; i < 5; i++) {
+            robotPart(robot, new THREE.TorusGeometry(0.66, 0.075, 8, 24), robotMaterials.metal, [0, 1.05 - i * 0.43, 0.35], [1.35, 0.44, 1]);
+        }
+        // Open coat leaves the mechanical chest and neck visible between its lapels.
+        for (const side of [-1, 1]) {
+            robotPart(robot, robotSphere, robotMaterials.coat, [side * 0.95, -0.4, -0.05], [0.8, 2.28, 0.83]);
+            const panel = [[0.52, 1.65], [1.52, 1.22], [1.66, -2.62], [0.2, -2.62], [0.28, -0.4]];
+            robotPart(robot, coatPanel(panel.map(([x, y]) => [side * x, y])), robotMaterials.coat, [0, 0, 0.65]);
+            const lapel = [[0.5, 1.85], [1.05, 1.48], [0.7, 0.85], [1.02, 0.48], [0.22, -0.65]];
+            robotPart(robot, coatPanel(lapel.map(([x, y]) => [side * x, y])), robotMaterials.shell, [0, 0, 0.83]);
+        }
+        robotPart(robot, new THREE.BoxGeometry(0.65, 0.55, 0.06), robotMaterials.coat, [-1.08, 0.05, 0.88]);
+        robotRod(robot, [-1.37, 0.28, 0.94], [-0.79, 0.28, 0.94], 0.025, robotMaterials.metal);
+        for (const y of [-0.95, -1.65, -2.25]) {
+            robotPart(robot, robotSphere, robotMaterials.metal, [0.3, y, 0.8], [0.055, 0.055, 0.03]);
+        }
+        robotRod(robot, [0, 1.5, 0], [0, 2.85, 0], 0.27, robotMaterials.dark);
+        for (let i = 0; i < 5; i++) {
+            robotPart(robot, new THREE.CylinderGeometry(0.35, 0.35, 0.09, 24), robotMaterials.metal, [0, 1.9 + i * 0.18, 0]);
+        }
+        for (const side of [-1, 1]) {
+            robotRod(robot, [side * 0.52, 1.6, 0.18], [side * 0.43, 2.8, 0.08], 0.085, robotMaterials.dark);
+        }
+        const head = new THREE.Group();
+        head.position.set(0, 3.53, 0);
+        head.rotation.y = -0.28;
+        head.rotation.z = -0.06;
+        robot.add(head);
+        robotPart(head, robotSphere, robotMaterials.dark, [0, 0, -0.13], [1.01, 1.44, 0.8]);
+        robotPart(head, robotSphere, robotMaterials.shell, [0, 0.12, -0.08], [1.055, 1.43, 0.83]);
+        // Taper the lower face into a chin while keeping a continuous curved surface.
+        const faceGeometry = new THREE.SphereGeometry(1, 48, 36);
+        const facePositions = faceGeometry.attributes.position;
+        for (let i = 0; i < facePositions.count; i++) {
+            const y = facePositions.getY(i);
+            facePositions.setX(i, facePositions.getX(i) * (y < 0 ? 1 + y * 0.28 : 1));
+        }
+        faceGeometry.computeVertexNormals();
+        robotPart(head, faceGeometry, robotMaterials.shell, [0, -0.04, 0.33], [0.94, 1.42, 0.67]);
+        for (const side of [-1, 1]) {
+            const temple = robotPart(head, new THREE.CylinderGeometry(0.43, 0.43, 0.15, 40), robotMaterials.dark, [side * 1.02, 0.12, -0.12]);
+            temple.rotation.z = Math.PI / 2;
+            const bearing = robotPart(head, new THREE.TorusGeometry(0.31, 0.045, 10, 32), robotMaterials.metal, [side * 1.12, 0.12, -0.12]);
+            bearing.rotation.y = Math.PI / 2;
+            const sensor = robotPart(head, new THREE.CylinderGeometry(0.12, 0.12, 0.018, 24), robotMaterials.sensor, [side * 1.14, 0.12, -0.12]);
+            sensor.rotation.z = Math.PI / 2;
+        }
+
+        // Elbow is its own pivot group: a salute needs the forearm to fold back toward
+        // the temple, which a single rigid arm group cannot reach.
+        function makeRobotArm(side) {
+            const arm = new THREE.Group();
+            arm.position.set(side * 1.72, 1.25, 0);
+            robot.add(arm);
+            robotPart(arm, robotSphere, robotMaterials.dark, [0, 0, 0], [0.49, 0.49, 0.49]);
+            robotPart(arm, robotSphere, robotMaterials.coat, [side * 0.08, -0.62, 0], [0.56, 1.02, 0.57]);
+            const forearm = new THREE.Group();
+            forearm.position.set(side * 0.12, -1.54, 0);
+            arm.add(forearm);
+            robotPart(forearm, robotSphere, robotMaterials.dark, [0, 0, 0], [0.32, 0.34, 0.32]);
+            robotPart(forearm, robotSphere, robotMaterials.coat, [0, -0.63, 0.08], [0.41, 0.78, 0.43]);
+            robotPart(forearm, new THREE.CylinderGeometry(0.36, 0.34, 0.23, 24), robotMaterials.shell, [0, -1.26, 0.08]);
+            robotRod(forearm, [0, -1.31, 0.08], [0, -1.55, 0.08], 0.17, robotMaterials.metal);
+            const hand = new THREE.Group();
+            hand.position.set(0, -1.62, 0.08);
+            forearm.add(hand);
+            robotPart(hand, robotSphere, robotMaterials.dark, [0, -0.12, 0], [0.29, 0.37, 0.15]);
+            for (let finger = 0; finger < 4; finger++) {
+                const x = (finger - 1.5) * 0.145;
+                const length = finger === 0 || finger === 3 ? 0.45 : 0.57;
+                for (let joint = 0; joint < 3; joint++) {
+                    const y = -0.37 - joint * length / 3;
+                    robotPart(hand, robotSphere, robotMaterials.metal, [x, y, 0], [0.068, 0.068, 0.068]);
+                    robotRod(hand, [x, y, 0], [x, y - length / 3 + 0.025, 0.025], 0.058, robotMaterials.dark);
+                }
+            }
+            robotRod(hand, [-side * 0.24, 0, 0], [-side * 0.43, -0.25, 0.06], 0.09, robotMaterials.dark);
+            robotRod(hand, [-side * 0.43, -0.25, 0.06], [-side * 0.42, -0.47, 0.13], 0.075, robotMaterials.dark);
+            return { arm, forearm, hand };
+        }
+        const right = makeRobotArm(1), left = makeRobotArm(-1);
+        robot.rotation.y = -0.22;
         robot.position.set(10, -30, 0);
         scene.add(robot);
+
+        function fitRobot() {
+            const halfWidth = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.position.z * camera.aspect;
+            const scale = Math.min(1, halfWidth / 20);
+            robot.scale.setScalar(scale);
+            robot.position.x = halfWidth - 5.2 * scale;
+        }
+        fitRobot();
 
         // --- 5. TIMELINES ---
 
@@ -571,15 +689,35 @@ No math.</code>
         });
 
         // Robot Rigging (Slides 9 - 12)
+        // Entry and exit stay scrubbed; the gestures are discrete poses keyed to the
+        // section the reader is on, so they hold still while a slide is being read.
         let tlRobot = gsap.timeline({ scrollTrigger: { trigger: "#slide-9", start: "top bottom", endTrigger: "#slide-12", end: "bottom center", scrub: 1 } });
-        tlRobot.to(robot.position, { y: -2, x: 10 }, 0) 
-               .to([rArm.rotation, lArm.rotation], { z: (i) => i===0 ? Math.PI/4 : -Math.PI/4, x: -Math.PI/4 }, 0.1)
-               .to(rArm.rotation, { x: -Math.PI, z: Math.PI/4 }, 0.3)
-               .to([rArm.rotation, lArm.rotation], { x: -Math.PI/2, z: (i) => i===0 ? Math.PI/4 : -Math.PI/4 }, 0.5)
-               .to([rArm.rotation, lArm.rotation], { x: -Math.PI/4, z: (i) => i===0 ? Math.PI/4 : -Math.PI/4 }, 0.7) 
-               .to("#stop-warn", { opacity: 1 }, 0.75)
-               .to(rArm.rotation, { x: -Math.PI/2, z: 0 }, 0.8) 
+        tlRobot.to(robot.position, { y: -2 }, 0)
+               .to("#stop-warn", { opacity: 1 }, 0.78)
                .to(robot.position, { y: -30 }, 0.9);
+
+        // Arm angles were solved so the saluting hand lands beside the head: upper arm
+        // 2.45 rad puts the elbow up and out, forearm 1.69 rad folds it back to the temple.
+        const poses = {
+            rest:   { rArm: { x: 0, z: 0 },        lArm: { x: 0, z: 0 },         rFore: { x: 0, z: 0 },        lFore: { x: 0, z: 0 },        rHand: { x: 0, z: 0 },    lHand: { x: 0, z: 0 },    head: { z: -0.06 } },
+            shrug:  { rArm: { x: -0.6, z: 0.42 },  lArm: { x: -0.6, z: -0.42 },  rFore: { x: -0.75, z: 0.15 }, lFore: { x: -0.75, z: -0.15 }, rHand: { x: -0.25, z: 0 }, lHand: { x: -0.25, z: 0 }, head: { z: 0.16 } },
+            salute: { rArm: { x: -0.25, z: 2.45 }, lArm: { x: -0.1, z: -0.12 },  rFore: { x: -0.2, z: 1.69 },  lFore: { x: 0, z: 0 },        rHand: { x: 0, z: -0.35 }, lHand: { x: 0, z: 0 },    head: { z: -0.02 } }
+        };
+
+        function setPose(name) {
+            const pose = poses[name];
+            const parts = [[right.arm, pose.rArm], [left.arm, pose.lArm], [right.forearm, pose.rFore],
+                           [left.forearm, pose.lFore], [right.hand, pose.rHand], [left.hand, pose.lHand]];
+            parts.forEach(([part, target]) => gsap.to(part.rotation, { ...target, duration: 0.7, ease: "power2.out", overwrite: true }));
+            gsap.to(head.rotation, { z: pose.head.z, duration: 0.7, ease: "power2.out", overwrite: true });
+        }
+
+        const gestures = [["#slide-9", "shrug"], ["#slide-9-cli", "rest"], ["#slide-10", "salute"], ["#slide-12", "rest"]];
+        gestures.forEach(([selector, name], i) => {
+            const previous = i ? gestures[i - 1][1] : "rest";
+            ScrollTrigger.create({ trigger: selector, start: "top 60%",
+                onEnter: () => setPose(name), onLeaveBack: () => setPose(previous) });
+        });
 
         // Slide 13: Pinned Discussion (Will AI Replace Jobs)
         let tlEnd = gsap.timeline({ scrollTrigger: { trigger: "#slide-13", pin: true, start: "top top", end: "+=1500", scrub: 1 } });
@@ -617,6 +755,7 @@ No math.</code>
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            fitRobot();
         });
     </script>
 </body>
